@@ -20,6 +20,7 @@ Build/*
 Testing/
 build/*
 build_*/
+build-*/
 core
 cscope.out
 Firmware.sublime-workspace

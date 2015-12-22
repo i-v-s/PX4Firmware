@@ -49,7 +49,8 @@ set(config_module_list
 	modules/sdlog2
 	modules/commander
 	modules/controllib
-	lib/mathlib
+        modules/insider
+        lib/mathlib
 	lib/mathlib/math/filter
 	lib/conversion
 	lib/ecl
