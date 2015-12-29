@@ -1,6 +1,9 @@
 #include <systemlib/err.h>
 #include <unistd.h>
 #include <errno.h>
+#include <uORB/uORB.h>
+#include <uORB/topics/inside.h>
+
 
 extern "C" __EXPORT int insider_main(int argc, char *argv[]);
 
@@ -11,18 +14,23 @@ public:
     Insider();
     ~Insider();
 private:
-    int		_control_task;			/**< task handle */
-    bool	_task_should_exit;		/**< if true, task() should exit */
-    int     task();
-    static int insider_task(int argc, char *argv[]);
+    int             _control_task;			/**< task handle */
+    bool            _task_should_exit;		/**< if true, task() should exit */
+    orb_advert_t    _topic;
+
+    int             task();
+    static int      insider_task(int argc, char *argv[]);
 };
 
 Insider * insiderPtr;
 
 Insider::Insider(): _control_task(-1), _task_should_exit(false)
 {
-
-
+    inside_s data = {0};
+    //data
+    // advertise on the first call
+    _topic = orb_advertise(ORB_ID(inside), &data);
+    // then publish on subsequent calls
 }
 
 
@@ -51,8 +59,10 @@ int Insider::insider_task(int argc, char *argv[])
 int Insider::task()
 {
     while (true) {
-        warnx("Hello from insider!\n");
-        usleep(10000000);
+        inside_s data = {0};
+        orb_publish(ORB_ID(inside), _topic, &data);
+
+        usleep(30000);
         if (_task_should_exit) break;
     }
 
@@ -82,7 +92,6 @@ Insider::start()
 
 int insider_main(int argc, char *argv[])
 {
-
     if (argc < 2) {
         warnx("usage: insider {start|stop|status}");
         return 1;
@@ -124,7 +133,12 @@ int insider_main(int argc, char *argv[])
     }
 
     if (!strcmp(argv[1], "status")) {
-        warnx(insiderPtr ? "running" : "not running");
+        if(insiderPtr == nullptr) {
+            warnx("not running");
+        }
+        else {
+            warnx("running");
+        }
         return 0;
     }
 
