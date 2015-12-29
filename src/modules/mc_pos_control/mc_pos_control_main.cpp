@@ -333,6 +333,44 @@ static const int ERROR = -1;
 MulticopterPositionControl	*g_control;
 }
 
+static struct
+{
+    math::Vector<3> pos, pos_sp, vel_sp, pos_p;
+    //_vel_sp = (_pos_sp - _pos) * _params.pos_p;
+
+    math::Vector<3> vel_err, vel_sp2, vel;
+    //math::Vector<3> vel_err = _vel_sp - _vel;
+
+    math::Vector<3> thrust_sp, vel_p, vel_err_d, vel_d, thrust_int;
+    /* thrust vector in NED frame */
+    // TODO?: + _vel_sp.emult(_params.vel_ff)
+    //math::Vector<3> thrust_sp = vel_err.emult(_params.vel_p) + _vel_err_d.emult(_params.vel_d) + thrust_int;
+
+    math::Vector<3> thrust_sp2;
+    float thrust_abs, thrust_abs2;
+    /* limit max thrust */
+    //float thrust_abs = thrust_sp.length();
+
+
+    void out()
+    {
+        warnx("_vel_sp = (_pos_sp - _pos) * _params.pos_p");
+        for(int x = 0; x < 3; x++)
+            warnx("    %5f = (%5f - %5f) * %5f", (double) vel_sp(x), (double) pos_sp(x), (double)pos(x), (double)pos_p(x));
+        warnx("vel_err = _vel_sp - _vel");
+        for(int x = 0; x < 3; x++)
+            warnx("    %5f = %5f - %5f", (double)vel_err(x), (double)vel_sp2(x), (double)vel(x));
+        warnx("thrust_sp = vel_err.emult(_params.vel_p) + _vel_err_d.emult(_params.vel_d) + thrust_int");
+        for(int x = 0; x < 3; x++)
+            warnx("    %5f = vel_err.emult(%5f) + %5f.emult(%5f) + %5f", (double)thrust_sp(x), (double)vel_p(x), (double)vel_err_d(x), (double)vel_d(x), (double)thrust_int(x));
+        warnx("thrust_abs = thrust_sp.length()");
+        warnx("    %5f = |%5f, %5f, %5f|", (double)thrust_abs, (double)thrust_sp2(0), (double)thrust_sp2(1), (double)thrust_sp2(2));
+        warnx("Final thrust = %5f", (double) thrust_abs2);
+    }
+
+} mpc_dump;
+
+
 MulticopterPositionControl::MulticopterPositionControl() :
 	SuperBlock(NULL, "MPC"),
 	_task_should_exit(false),
@@ -1257,6 +1295,12 @@ MulticopterPositionControl::task_main()
 				if (_run_alt_control) {
 					_vel_sp(2) = (_pos_sp(2) - _pos(2)) * _params.pos_p(2);
 				}
+                /**********/
+                mpc_dump.pos_sp = _pos_sp;
+                mpc_dump.pos = _pos;
+                mpc_dump.pos_p = _params.pos_p;
+                mpc_dump.vel_sp = _vel_sp;
+                /**********/
 
 				/* make sure velocity setpoint is saturated in xy*/
 				float vel_norm_xy = sqrtf(_vel_sp(0) * _vel_sp(0) +
@@ -1371,6 +1415,18 @@ MulticopterPositionControl::task_main()
 					// TODO?: + _vel_sp.emult(_params.vel_ff)
 					math::Vector<3> thrust_sp = vel_err.emult(_params.vel_p) + _vel_err_d.emult(_params.vel_d) + thrust_int;
 
+                    /*******/
+                    mpc_dump.vel_err = vel_err;
+                    mpc_dump.vel_sp2 = _vel_sp;
+                    mpc_dump.vel = _vel;
+
+                    mpc_dump.thrust_sp = thrust_sp;
+                    mpc_dump.vel_p = _params.vel_p;
+                    mpc_dump.vel_err_d = _vel_err_d;
+                    mpc_dump.vel_d = _params.vel_d;
+                    mpc_dump.thrust_int = thrust_int;
+                    /*******/
+
 					if (!_control_mode.flag_control_velocity_enabled) {
 						thrust_sp(0) = 0.0f;
 						thrust_sp(1) = 0.0f;
@@ -1453,6 +1509,11 @@ MulticopterPositionControl::task_main()
 
 					/* limit max thrust */
 					float thrust_abs = thrust_sp.length();
+
+                    /********/
+                    mpc_dump.thrust_sp2 = thrust_sp;
+                    mpc_dump.thrust_abs = thrust_abs;
+                    /********/
 
 					if (thrust_abs > _params.thr_max) {
 						if (thrust_sp(2) < 0.0f) {
@@ -1581,6 +1642,10 @@ MulticopterPositionControl::task_main()
 					}
 
 					_att_sp.thrust = thrust_abs;
+
+                    /******/
+                    mpc_dump.thrust_abs2 = thrust_abs;
+                    /******/
 
 					/* save thrust setpoint for logging */
 					_local_pos_sp.acc_x = thrust_sp(0) * ONE_G;
@@ -1744,7 +1809,7 @@ MulticopterPositionControl::start()
 int mc_pos_control_main(int argc, char *argv[])
 {
 	if (argc < 2) {
-		warnx("usage: mc_pos_control {start|stop|status}");
+        warnx("usage: mc_pos_control {start|stop|status|dump}");
 		return 1;
 	}
 
@@ -1782,6 +1847,15 @@ int mc_pos_control_main(int argc, char *argv[])
 		pos_control::g_control = nullptr;
 		return 0;
 	}
+
+    if (!strcmp(argv[1], "dump")) {
+        if (pos_control::g_control == nullptr) {
+            warnx("not running");
+            //return 0;
+        }
+        mpc_dump.out();
+        return 0;
+    }
 
 	if (!strcmp(argv[1], "status")) {
 		if (pos_control::g_control) {
